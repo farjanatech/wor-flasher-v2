@@ -426,7 +426,7 @@ If this error persists, contact Botspot - the WoR-flasher developer."
   fi
   
   #install dependencies
-  install_packages 'yad aria2 cabextract wimtools chntpw genisoimage exfat-fuse wget udftools bc' || exit 1
+  install_packages 'yad aria2 cabextract wimtools chntpw genisoimage exfat-fuse wget udftools bc parted xwayland' || exit 1
   
   #install exfat partition manipulation utility. exfatprogs replaces exfat-utils, but they cannot both be installed at once.
   if package_available exfatprogs && ! package_installed exfat-utils ;then
@@ -458,7 +458,7 @@ if [ -e "$DIRECTORY" ] && [ ! -f "${DIRECTORY}/no-update" ];then
   prepwd="$PWD"
   cd "$DIRECTORY"
   localhash="$(git rev-parse HEAD)"
-  latesthash="$(git ls-remote https://github.com/Botspot/wor-flasher HEAD | awk '{print $1}')"
+  latesthash="$(git ls-remote https://github.com/farjanatech/wor-flasher-v2 HEAD | awk '{print $1}')"
   
   if [ "$localhash" != "$latesthash" ] && [ ! -z "$latesthash" ] && [ ! -z "$localhash" ];then
     status "Auto-updating wor-flasher for the latest features and improvements..."
