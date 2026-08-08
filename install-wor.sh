@@ -1009,9 +1009,21 @@ if [[ "$SOURCE_FILE" == *'.ESD' ]] || [[ "$SOURCE_FILE" == *'.esd' ]];then
   
 elif [[ "$SOURCE_FILE" == *'.ISO' ]] || [[ "$SOURCE_FILE" == *'.iso' ]];then
   cd "$PWD/$winfiles" || error "Failed to access $PWD/$winfiles folder"
-  
-  status "Mounting $(basename "$SOURCE_FILE")"
+
+  status "Preparing ISO extraction workspace"
+
+  # An interrupted run can leave read-only files copied from the Windows ISO.
+  # Remove only generated extraction output before rebuilding it.
+  if mountpoint -q "$PWD/isomount" 2>/dev/null; then
+    sudo umount "$PWD/isomount" 2>/dev/null || \
+    sudo umount -l "$PWD/isomount" 2>/dev/null || \
+      error "Failed to unmount stale ISO mountpoint: $PWD/isomount"
+  fi
+
+  sudo rm -rf -- "$PWD/bootpart" "$PWD/install.wim" "$PWD/alldone" "$PWD/isomount"
   mkdir -p "$PWD/isomount" || error "Failed to make $PWD/isomount folder"
+
+  status "Mounting $(basename "$SOURCE_FILE")"
   sudo umount "$PWD/isomount" 2>/dev/null
   sudo mount "$SOURCE_FILE" "$PWD/isomount" 2>/dev/null
   if [ $? != 0 ];then
@@ -1039,14 +1051,14 @@ elif [[ "$SOURCE_FILE" == *'.ISO' ]] || [[ "$SOURCE_FILE" == *'.iso' ]];then
   mkdir -p "$PWD"/bootpart
   status "Copying files from ISO file to $PWD:"
   echo "  - Boot files"
-  cp -r "$PWD/isomount/boot" "$PWD"/bootpart || error "Failed to copy $PWD/isomount/boot to $PWD/bootpart"
+  cp -r --no-preserve=mode,ownership "$PWD/isomount/boot" "$PWD"/bootpart || error "Failed to copy $PWD/isomount/boot to $PWD/bootpart"
   echo "  - EFI files"
-  cp -r "$PWD/isomount/efi" "$PWD"/bootpart || error "Failed to copy $PWD/isomount/efi to $PWD/bootpart"
+  cp -r --no-preserve=mode,ownership "$PWD/isomount/efi" "$PWD"/bootpart || error "Failed to copy $PWD/isomount/efi to $PWD/bootpart"
   mkdir -p "$PWD"/bootpart/sources || error "Failed to make folder: $PWD/bootpart/sources"
   echo "  - boot.wim"
-  cp "$PWD/isomount/sources/boot.wim" "$PWD"/bootpart/sources || error "Failed to copy $PWD/isomount/sources/boot.wim to $PWD/bootpart/sources"
+  cp --no-preserve=mode,ownership "$PWD/isomount/sources/boot.wim" "$PWD"/bootpart/sources || error "Failed to copy $PWD/isomount/sources/boot.wim to $PWD/bootpart/sources"
   echo "  - install.wim"
-  cp "$PWD/isomount/sources/install.wim" "$PWD" || error "Failed to copy $PWD/isomount/sources/install.wim to $PWD/winpart"
+  cp --no-preserve=mode,ownership "$PWD/isomount/sources/install.wim" "$PWD" || error "Failed to copy $PWD/isomount/sources/install.wim to $PWD/winpart"
   
   touch "$PWD/alldone" #mark this folder of microsoft stuff as complete
   
@@ -1073,7 +1085,11 @@ fi
 echo
 status "Formatting $DEVICE - \e[93mThere is no turning back now."
 sync
-sudo umount -ql $(get_partition "$DEVICE" all)
+mapfile -t WOR_PARTITIONS < <(get_partition "$DEVICE" all)
+
+if ((${#WOR_PARTITIONS[@]})); then
+  sudo umount -ql "${WOR_PARTITIONS[@]}" 2>/dev/null || true
+fi
 sync
 status "Creating partition table"
 sudo parted -s "$DEVICE" mklabel gpt || error "Failed to make GPT partition table on ${DEVICE}!"
@@ -1090,10 +1106,38 @@ fi
 sudo parted -s "$DEVICE" set 2 msftdata on || error "Failed to enable msftdata flag on $DEVICE partition 2"
 sync
 
+status "Waiting for partition devices"
+
+# Raspberry Pi OS may not publish new MMC/USB partition nodes immediately.
+sudo partprobe "$DEVICE" 2>/dev/null || \
+sudo blockdev --rereadpt "$DEVICE" 2>/dev/null || true
+sudo udevadm settle 2>/dev/null || true
+
+PART1=""
+PART2=""
+
+for i in {1..20}; do
+  PART1="$(get_partition "$DEVICE" 1 2>/dev/null || true)"
+  PART2="$(get_partition "$DEVICE" 2 2>/dev/null || true)"
+
+  if [ -n "$PART1" ] && [ -n "$PART2" ] && \
+     [ -b "$PART1" ] && [ -b "$PART2" ]; then
+    break
+  fi
+
+  sleep 0.5
+  sudo udevadm settle 2>/dev/null || true
+done
+
 status "Generating filesystems"
-PART1="$(get_partition "$DEVICE" 1)"
-PART2="$(get_partition "$DEVICE" 2)"
 echo "Partition 1: $PART1, Partition 2: $PART2"
+
+if [ -z "$PART1" ] || [ -z "$PART2" ] || \
+   [ ! -b "$PART1" ] || [ ! -b "$PART2" ]; then
+  error "Partition devices failed to appear for $DEVICE after repartitioning.
+Current lsblk output:
+$(lsblk "$DEVICE" 2>&1)"
+fi
 
 errors="$(sudo mkfs.fat -F 32 "$PART1" 2>&1)" || error "Failed to create FAT partition on $PART1\nErrors:\n$errors"
 errors="$(sudo mkfs.exfat "$PART2" 2>&1)" || error "Failed to create EXFAT partition on $PART2\nErrors:\n$errors"

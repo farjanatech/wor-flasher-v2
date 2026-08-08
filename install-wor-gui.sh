@@ -1,5 +1,22 @@
 #!/bin/bash
 
+# WoR-Flasher v2 Wayland compatibility
+# Keep Raspberry Pi OS on Wayland, but run YAD/GTK through XWayland.
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] && [ "${WOR_V2_XWAYLAND:-0}" != "1" ];then
+  if [ -z "${DISPLAY:-}" ];then
+    echo "Wayland is active but XWayland DISPLAY is unavailable." 1>&2
+    exit 1
+  fi
+
+  export WOR_V2_XWAYLAND=1
+  export GDK_BACKEND=x11
+  export GTK_A11Y=none
+  unset WAYLAND_DISPLAY
+  exec "$0" "$@"
+fi
+
+# Avoid the harmless missing accessibility-bus warning.
+export GTK_A11Y=none
 #Written by Botspot
 #This script is a GUI front-end for the install-wor.sh script
 

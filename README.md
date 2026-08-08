@@ -1,4 +1,11 @@
-# ![app icon](https://github.com/Botspot/wor-flasher/blob/main/logo.png?raw=true) WoR-flasher
+> ## WoR-Flasher v2 — unofficial compatibility fork
+>
+> This fork adds Raspberry Pi OS Wayland/XWayland compatibility and reliability fixes discovered while flashing Windows 11 ARM on Raspberry Pi 5.
+>
+> **v2 fixes include:** stale/read-only ISO extraction cleanup, writable ISO copies, safe empty-partition unmounting, and `partprobe` + `udevadm settle` retry handling for `/dev/mmcblk*` partition nodes.
+>
+> Upstream project: **Botspot/wor-flasher**. This fork is not an official Botspot or Windows on Raspberry release.
+># ![app icon](https://github.com/Botspot/wor-flasher/blob/main/logo.png?raw=true) WoR-flasher
 **Use a Linux machine to install Windows 10 or Windows 11 on a Raspberry Pi SD card.**
 
 ## 🚨 This repository is looking for a maintainer!
