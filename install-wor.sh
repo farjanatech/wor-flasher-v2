@@ -740,8 +740,8 @@ if [ "$(get_size_raw "$DEVICE")" -lt $((8*1024*1024*1024)) ];then
   error "Drive $DEVICE is smaller than 8GB and cannot be used."
 fi
 
-if [ -z "$CAN_INSTALL_ON_SAME_DRIVE" ] && [ "$(get_size_raw "$DEVICE")" -ge $((25*1024*1024*1024)) ];then
-  #Drive is >=25GB, so present the user with the option to make this a recovery drive or a full installation
+if [ -z "$CAN_INSTALL_ON_SAME_DRIVE" ] && [ "$(get_size_raw "$DEVICE")" -ge $((40*1024*1024*1024)) ];then
+  #Drive is >=40GB, so present the user with the option to make this a recovery drive or a full installation
   
   while true; do
     echo -ne "\nWould you like to:
@@ -763,10 +763,10 @@ Choose the installation mode (\e[96m1\e[0m or \e[96m2\e[0m): "
   done
   
 elif [ -z "$CAN_INSTALL_ON_SAME_DRIVE" ];then
-  #Drive is <25GB, so user's only choice is to make this a recovery drive
+  #Drive is <40GB, so user's only choice is to make this a recovery drive
   
   while true; do
-    echo -ne "\nDrive $DEVICE is too small to install Windows to itself. (25 GB is necessary)
+    echo -ne "\nDrive $DEVICE is too small to install Windows to itself. (40 GB is necessary)
 Would you like to:\n\e[96m1\e[0m) Exit
 \e[96m2\e[0m) Create a recovery drive to install Windows on other >16 GB drives
 Choose the installation mode (\e[96m1\e[0m or \e[96m2\e[0m): "
@@ -788,8 +788,8 @@ elif [ "$CAN_INSTALL_ON_SAME_DRIVE" != 0 ] && [ "$CAN_INSTALL_ON_SAME_DRIVE" != 
   
 elif [ "$CAN_INSTALL_ON_SAME_DRIVE" == 1 ];then
   #Variable pre-populated, so if it is 1 make sure the drive is 25GB or larger
-  if [ "$(get_size_raw "$DEVICE")" -lt $((25*1024*1024*1024)) ];then
-    error "Drive $DEVICE is smaller than 25GB and cannot be used for self-installation.\nPlease set CAN_INSTALL_ON_SAME_DRIVE=0"
+  if [ "$(get_size_raw "$DEVICE")" -lt $((40*1024*1024*1024)) ];then
+    error "Drive $DEVICE is smaller than 40GB and cannot be used for self-installation.\nPlease set CAN_INSTALL_ON_SAME_DRIVE=0"
   fi
   #no need to check if drive is >8GB, because it was already done earlier
 fi
@@ -1077,6 +1077,104 @@ if [ "$DRY_RUN" == 1 ];then
   exit 0
 fi
 
+# WoR-Flasher v2 smart self-install sizing
+#
+# WoR-PE needs free, unallocated space at the end of the target disk for its
+# temporary staging partition. The original fixed 19000MB endpoint can leave
+# too little space for the final Windows apply partition on newer ARM64 images.
+#
+# Calculate:
+#   - Windows apply requirement from the largest expanded WIM image.
+#   - Temporary staging requirement from compressed install.wim + boot files.
+SMART_SELF_INSTALL_END_MB=''
+
+if [ "$CAN_INSTALL_ON_SAME_DRIVE" == 1 ];then
+  WIM_PATH="$PWD/$winfiles/install.wim"
+  BOOT_FILES_PATH="$PWD/$winfiles/bootpart"
+
+  [ -f "$WIM_PATH" ] || error "Smart sizing: install.wim was not found at $WIM_PATH"
+  [ -d "$BOOT_FILES_PATH" ] || error "Smart sizing: boot files were not found at $BOOT_FILES_PATH"
+
+  DEVICE_BYTES="$(get_size_raw "$DEVICE")"
+  WIM_FILE_BYTES="$(stat -c %s "$WIM_PATH")"
+  BOOT_FILES_BYTES="$(du -sb "$BOOT_FILES_PATH" | awk '{print $1}')"
+
+  # wiminfo exposes one Total Bytes value per image. Use the largest image so
+  # multi-edition ISOs remain safe regardless of the edition chosen in WoR-PE.
+  WIM_EXPANDED_BYTES="$(
+    wiminfo "$WIM_PATH" 2>/dev/null |
+      awk '/^[[:space:]]*Total Bytes:/ {
+             value=$3+0
+             if (value > max) max=value
+           }
+           END {
+             if (max > 0) printf "%.0f\n", max
+           }'
+  )"
+
+  if [ -z "$WIM_EXPANDED_BYTES" ] || ! [[ "$WIM_EXPANDED_BYTES" =~ ^[0-9]+$ ]];then
+    error "Smart sizing: unable to determine expanded Windows size from install.wim using wiminfo."
+  fi
+
+  GIB=$((1024*1024*1024))
+  MIB=$((1024*1024))
+
+  # Final Windows apply space:
+  # largest expanded image + 8GiB headroom, never less than 32GiB.
+  WINDOWS_MIN_BYTES=$((32*GIB))
+  WINDOWS_HEADROOM_BYTES=$((8*GIB))
+
+  # Covers WoR-PE's 128MiB EFI, 16MiB MSR, alignment and extra safety.
+  WINDOWS_LAYOUT_OVERHEAD_BYTES=$((512*MIB))
+
+  # Temporary NTFS staging partition needs install.wim + boot files + margin.
+  STAGING_MARGIN_BYTES=$((4*GIB))
+
+  WINDOWS_REQUIRED_BYTES=$((WIM_EXPANDED_BYTES + WINDOWS_HEADROOM_BYTES))
+  if [ "$WINDOWS_REQUIRED_BYTES" -lt "$WINDOWS_MIN_BYTES" ];then
+    WINDOWS_REQUIRED_BYTES="$WINDOWS_MIN_BYTES"
+  fi
+
+  FRONT_REQUIRED_BYTES=$((WINDOWS_REQUIRED_BYTES + WINDOWS_LAYOUT_OVERHEAD_BYTES))
+  STAGING_REQUIRED_BYTES=$((WIM_FILE_BYTES + BOOT_FILES_BYTES + STAGING_MARGIN_BYTES))
+  MAX_FRONT_BYTES=$((DEVICE_BYTES - STAGING_REQUIRED_BYTES))
+
+  if [ "$MAX_FRONT_BYTES" -lt "$FRONT_REQUIRED_BYTES" ];then
+    device_gib="$(awk "BEGIN {printf \"%.1f\", $DEVICE_BYTES/$GIB}")"
+    wim_gib="$(awk "BEGIN {printf \"%.1f\", $WIM_FILE_BYTES/$GIB}")"
+    expanded_gib="$(awk "BEGIN {printf \"%.1f\", $WIM_EXPANDED_BYTES/$GIB}")"
+    staging_gib="$(awk "BEGIN {printf \"%.1f\", $STAGING_REQUIRED_BYTES/$GIB}")"
+    windows_gib="$(awk "BEGIN {printf \"%.1f\", $WINDOWS_REQUIRED_BYTES/$GIB}")"
+
+    error "This Windows image is too large for safe self-installation on $DEVICE.
+Drive size: ${device_gib} GiB
+install.wim: ${wim_gib} GiB compressed
+Largest image: ${expanded_gib} GiB expanded
+Required Windows deployment area: ${windows_gib} GiB
+Required WoR-PE staging area: ${staging_gib} GiB
+
+Use a larger SD/USB drive, or create recovery media and install Windows to another drive."
+  fi
+
+  # parted MB uses decimal megabytes. Flooring leaves at least the calculated
+  # staging reserve unallocated at the end of the target drive.
+  SMART_SELF_INSTALL_END_MB=$((MAX_FRONT_BYTES / 1000000))
+
+  if [ "$SMART_SELF_INSTALL_END_MB" -le 1000 ];then
+    error "Smart sizing calculated an invalid partition-2 endpoint: ${SMART_SELF_INSTALL_END_MB}MB"
+  fi
+
+  estimated_windows_bytes=$((SMART_SELF_INSTALL_END_MB*1000000 - WINDOWS_LAYOUT_OVERHEAD_BYTES))
+  estimated_stage_bytes=$((DEVICE_BYTES - SMART_SELF_INSTALL_END_MB*1000000))
+
+  status "Smart self-install partition sizing:"
+  echo "  Device: $(awk "BEGIN {printf \"%.1f\", $DEVICE_BYTES/$GIB}") GiB"
+  echo "  install.wim: $(awk "BEGIN {printf \"%.1f\", $WIM_FILE_BYTES/$GIB}") GiB"
+  echo "  Largest expanded WIM image: $(awk "BEGIN {printf \"%.1f\", $WIM_EXPANDED_BYTES/$GIB}") GiB"
+  echo "  Initial Windows deployment area: ~$(awk "BEGIN {printf \"%.1f\", $estimated_windows_bytes/$GIB}") GiB"
+  echo "  WoR-PE temporary staging reserve: ~$(awk "BEGIN {printf \"%.1f\", $estimated_stage_bytes/$GIB}") GiB"
+  echo "  Partition 2 endpoint: ${SMART_SELF_INSTALL_END_MB}MB"
+fi
 #now that downloads are complete, check again if destination storage is accessible
 if [ ! -b "$DEVICE" ];then
   error "Device $DEVICE is not a valid block device! Available devices:\n$(list_devs)"
@@ -1098,8 +1196,9 @@ status "Generating partitions"
 sudo parted -s "$DEVICE" mkpart primary 1MB 1000MB || error "Failed to make 1GB primary partition 1 on ${DEVICE}!"
 sudo parted -s "$DEVICE" set 1 msftdata on || error "Failed to enable msftdata flag on $DEVICE partition 1"
 sync
-if [ $CAN_INSTALL_ON_SAME_DRIVE == 1 ];then
-  sudo parted -s "$DEVICE" mkpart primary 1000MB 19000MB || error "Failed to make 19GB primary partition 2 on ${DEVICE}!"
+if [ "$CAN_INSTALL_ON_SAME_DRIVE" == 1 ];then
+  [ -n "$SMART_SELF_INSTALL_END_MB" ] || error "Smart sizing did not calculate a self-install partition endpoint."
+  sudo parted -s "$DEVICE" mkpart primary 1000MB "${SMART_SELF_INSTALL_END_MB}MB" || error "Failed to make smart-sized primary partition 2 on ${DEVICE}!"
 else
   sudo parted -s "$DEVICE" mkpart primary 1000MB 7000MB || error "Failed to make 7GB primary partition 2 on ${DEVICE}!"
 fi

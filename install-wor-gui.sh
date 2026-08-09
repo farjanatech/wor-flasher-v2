@@ -306,12 +306,12 @@ echo "DEVICE: $DEVICE"
 if [ "$(get_size_raw "$DEVICE")" -lt $((7*1024*1024*1024)) ];then
   #if less than 7gb
   error "Drive $DEVICE is smaller than 7GB and cannot be used."
-elif [ "$(get_size_raw "$DEVICE")" -lt $((25*1024*1024*1024)) ];then
-  #if less than 25gb
+elif [ "$(get_size_raw "$DEVICE")" -lt $((40*1024*1024*1024)) ];then
+  #if less than 40gb
   echo "Drive $device is too small to install windows on itself. Using recovery-disk mode to install Windows on other larger devices."
   CAN_INSTALL_ON_SAME_DRIVE=0
 else
-  #larger than 25gb
+  #larger than 40gb
   CAN_INSTALL_ON_SAME_DRIVE=1
 fi
 echo "CAN_INSTALL_ON_SAME_DRIVE: $CAN_INSTALL_ON_SAME_DRIVE"
@@ -466,7 +466,7 @@ fi
 { #confirmation dialog and edit config.txt
 
 window_text="- Target drive: <b>$DEVICE</b> ($(lsblk -dno SIZE "$DEVICE" | tr -d ' ')B $(get_device_name "$DEVICE"))
-- $(echo "$CAN_INSTALL_ON_SAME_DRIVE" | sed 's/1/Drive is larger than 25 GB - can install Windows on itself/g' | sed 's/0/Drive is smaller than 25 GB - can install Windows on other drives/g')
+- $(echo "$CAN_INSTALL_ON_SAME_DRIVE" | sed 's/1/Drive is larger than 40 GB - can install Windows on itself/g' | sed 's/0/Drive is smaller than 40 GB - can install Windows on other drives/g')
 - Target hardware: <b>Raspberry Pi $RPI_MODEL</b>
 - Operating system: <b>$(get_os_name "$BID" | sed "s/ build / ($WIN_LANG) arm64 build /g")</b>"
 
