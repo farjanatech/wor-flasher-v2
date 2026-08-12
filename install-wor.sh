@@ -874,7 +874,7 @@ if [ ! -d "$PWD/pi${RPI_MODEL}-uefipackage" ];then
   
   case "$RPI_MODEL" in
     5)
-      URL='https://github.com/worproject/rpi5-uefi/releases/download/v0.3/RPi5_UEFI_Release_v0.3.zip'
+      URL='https://github.com/farjanatech/rpi5-uefi/releases/download/rpi5-20260730.1-fan-exp.2/RPi5_UEFI_Release_rpi5-20260730.1-fan-exp.2.zip'
       ;;
     4)
       URL='https://github.com/pftf/RPi4/releases/download/v1.33/RPi4_UEFI_Firmware_v1.33.zip'
@@ -892,7 +892,23 @@ if [ ! -d "$PWD/pi${RPI_MODEL}-uefipackage" ];then
     rm -rf "$PWD/pi${RPI_MODEL}-uefipackage"
     error "The unzip command failed to extract $PWD/RPi${RPI_MODEL}_UEFI_Firmware.zip"
   fi
-  
+
+  if [ "$RPI_MODEL" == 5 ];then
+    # Only retain files required to boot the Pi 5 UEFI.
+    find "$PWD/pi5-uefipackage" -mindepth 1 -maxdepth 1 \
+      ! -name 'RPI_EFI.fd' \
+      ! -name 'bcm2712-rpi-5-b.dtb' \
+      ! -name 'config.txt' \
+      -exec rm -rf -- {} +
+
+    for required_file in RPI_EFI.fd bcm2712-rpi-5-b.dtb config.txt; do
+      if [ ! -f "$PWD/pi5-uefipackage/$required_file" ];then
+        rm -rf "$PWD/pi5-uefipackage"
+        error "Pi 5 UEFI package is missing required file: $required_file"
+      fi
+    done
+  fi
+
   rm -f "$PWD/RPi${RPI_MODEL}_UEFI_Firmware.zip"
   echo
 else
