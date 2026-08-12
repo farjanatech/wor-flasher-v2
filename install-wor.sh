@@ -552,7 +552,7 @@ Enter \e[96m1\e[0m, \e[96m2\e[0m or \e[96m3\e[0m: "
           
           echo -ne "\nAdditional options:
 \e[96m1\e[0m) Enter an exact Windows version to download
-\e[96m2\e[0m) Use a Windows ISO file${add_options}
+\e[96m2\e[0m) Use a Windows ISO or ESD file${add_options}
 \e[96m$num_opts\e[0m) Go back
 $([ $num_opts == 3 ] && echo 'Enter \e[96m1\e[0m, \e[96m2\e[0m or \e[96m3\e[0m: ' || echo 'Enter a number: ')"
           read reply
@@ -574,16 +574,16 @@ $([ $num_opts == 3 ] && echo 'Enter \e[96m1\e[0m, \e[96m2\e[0m or \e[96m3\e[0m: 
               fi
               ;;
               
-            2) #Use a Windows ISO file
+            2) #Use a Windows ISO or ESD file
               while [ -z "$SOURCE_FILE" ];do
-                read -p $'\nEnter the full path to a Windows 10/11 ARM64 ISO file: ' SOURCE_FILE
+                read -p $'\nEnter the full path to a Windows 10/11 ARM64 ISO or ESD file: ' SOURCE_FILE
                 if [ -z "$SOURCE_FILE" ];then
                   break #exit ISO file menu 
                 elif [ ! -f "$SOURCE_FILE" ];then
                   echo_red "This file does not exist. Check spelling and try again."
                   SOURCE_FILE=''
-                elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]];then
-                  echo_red "This file does not have a .ISO file extension."
+                elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]] && [[ "$SOURCE_FILE" != *'.ESD' ]] && [[ "$SOURCE_FILE" != *'.esd' ]];then
+                  echo_red "This file does not have a .ISO or .ESD file extension."
                   SOURCE_FILE=''
                 elif [ "$(du -b "$SOURCE_FILE" | awk '{print $1}')" -lt $((3*1024*1024*1024)) ];then
                   echo_red "This file is smaller than 3GB and is probably incomplete."
@@ -642,9 +642,9 @@ else
   #Verify SOURCE_FILE value provided to script
   if [ ! -z "$SOURCE_FILE" ];then
     if [ ! -f "$SOURCE_FILE" ];then
-      error "Specified ISO file '$SOURCE_FILE' does not exist."
-    elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]];then
-      error "Specified ISO file '$SOURCE_FILE' does not have a .ISO file extension."
+      error "Specified source file '$SOURCE_FILE' does not exist."
+    elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]] && [[ "$SOURCE_FILE" != *'.ESD' ]] && [[ "$SOURCE_FILE" != *'.esd' ]];then
+      error "Specified source file '$SOURCE_FILE' does not have a .ISO or .ESD file extension."
     elif [ "$(du -b "$SOURCE_FILE" | awk '{print $1}')" -lt $((3*1024*1024*1024)) ];then
       error "Specified ISO file '$SOURCE_FILE' is smaller than 3GB and is probably incomplete."
     fi
@@ -918,7 +918,7 @@ fi
 { #Download Windows ESD if an ISO was not provided and one has not already been extracted
 
 if [ ! -z "$SOURCE_FILE" ];then
-  echo "Not downloading ESD image - using your ISO instead"
+  echo "Not downloading ESD image - using your local ISO/ESD instead"
   
   #set folder name to store files from the ISO
   #files are stored in a folder specific to the OS version and language

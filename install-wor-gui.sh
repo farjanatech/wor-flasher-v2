@@ -109,7 +109,7 @@ if [ -z "$RPI_MODEL" ] || [ -z "$BID" ];then
       BID=''
       while [ -z "$BID" ];do
         reply="$(echo -e "FALSE\nChoose an exact Windows version to download\nenter exact
-FALSE\nUse a Windows ISO file\nuse iso
+FALSE\nUse a Windows ISO or ESD file\nuse iso
 FALSE\nUse a cached version of Windows from a previous run\nuse cached" | yad "${yadflags[@]}" --width=420 \
           --list --radiolist --column=chk:CHK --column=human --column=script:HD --no-headers --print-column=3 --no-selection \
           --text=$'<big><b>More options</b></big>' \
@@ -136,8 +136,8 @@ FALSE\nUse a cached version of Windows from a previous run\nuse cached" | yad "$
             ;;
           'use iso')
             SOURCE_FILE="$(yad "${yadflags[@]}" --width=420 \
-              --file --file-filter "ISO disk images | *.ISO *.iso" \
-              --text=$'<big><b>Import ISO file</b></big>\nMust be an ARM64 version of Windows from <a href="https://uupdump.net">uupdump.net</a>' \
+              --file --file-filter "ISO or ESD disk images | *.ISO *.iso *.ESD *.esd" \
+              --text=$'<big><b>Import ISO or ESD file</b></big>\nMust be an ARM64 version of Windows from <a href="https://uupdump.net">uupdump.net</a>' \
               --button="<b>Cancel</b>":1 --button="<b>OK</b>":0)"
             
             #verify ISO file
@@ -146,8 +146,8 @@ FALSE\nUse a cached version of Windows from a previous run\nuse cached" | yad "$
             elif [ ! -f "$SOURCE_FILE" ];then
               yad "${yadflags[@]}" --text="This file does not exist. Check spelling and try again."
               SOURCE_FILE=''
-            elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]];then
-              yad "${yadflags[@]}" --text="This file does not have a .ISO file extension."
+            elif [[ "$SOURCE_FILE" != *'.ISO' ]] && [[ "$SOURCE_FILE" != *'.iso' ]] && [[ "$SOURCE_FILE" != *'.ESD' ]] && [[ "$SOURCE_FILE" != *'.esd' ]];then
+              yad "${yadflags[@]}" --text="This file does not have a .ISO or .ESD file extension."
               SOURCE_FILE=''
             elif [ "$(du -b "$SOURCE_FILE" | awk '{print $1}')" -lt $((3*1024*1024*1024)) ];then
               yad "${yadflags[@]}" --text="This file is smaller than 3GB and is probably incomplete."
