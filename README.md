@@ -225,6 +225,40 @@ cd ~/wor-flasher-v2
 
 ---
 
+# Complete uninstall
+
+To completely remove **WoR-Flasher v2**, its downloaded Windows files, the
+Raspberry Pi UEFI cache, the Desktop icon, and its Applications-menu entry, run
+the following commands on Raspberry Pi OS:
+
+```bash
+desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+[ -z "$desktop_dir" ] && desktop_dir="$HOME/Desktop"
+
+rm -rf -- "$HOME/wor-flasher-v2" "$HOME/wor-flasher-files"
+rm -f -- \
+  "$desktop_dir/WoR-Flasher-v2.desktop" \
+  "$HOME/.local/share/applications/wor-flasher-v2.desktop"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+```
+
+> **Warning:** This permanently deletes everything under
+> `~/wor-flasher-files`, including downloaded Windows ESD images, extracted
+> `boot.wim` and `install.wim` files, cached UEFI packages, and WoR PE files.
+> Back up anything you want to keep before running the commands.
+
+If you cloned the repository somewhere other than `~/wor-flasher-v2`, or
+selected a custom working directory (`DL_DIR`) in Advanced Options, delete
+those custom locations separately.
+
+The commands intentionally do not uninstall shared Raspberry Pi OS packages
+such as Git, YAD, WIM tools, Parted, or XWayland because other applications may
+still need them.
+
+---
 # Updating WoR-Flasher v2
 
 To manually update this fork:
