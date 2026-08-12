@@ -1313,7 +1313,10 @@ fi
 echo "  - UEFI firmware"
 sudo cp -r "$PWD/pi${RPI_MODEL}-uefipackage"/* "$mntpnt"/bootpart || error "Failed to copy $PWD/pi${RPI_MODEL}-uefipackage to $mntpnt/bootpart"
 
-if [ ! -z "$CONFIG_TXT" ];then
+if [ "$RPI_MODEL" == 5 ];then
+  # Preserve the config.txt supplied by the Pi 5 UEFI release unchanged.
+  status "Using config.txt supplied by the Pi 5 UEFI package"
+elif [ ! -z "$CONFIG_TXT" ];then
   status "Customizing config.txt according to the CONFIG_TXT variable"
   echo "$CONFIG_TXT" | sudo tee "$mntpnt"/bootpart/config.txt >/dev/null
 fi
