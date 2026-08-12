@@ -40,6 +40,61 @@ RUN_MODE=gui #this variable is detected by install-wor.sh to display gui error m
 [ -z "$DIRECTORY" ] && DIRECTORY="$(readlink -f "$(dirname "$0")")"
 [ ! -e "$DIRECTORY" ] && error "install-wor-gui.sh: Failed to determine the directory that contains this script. Try running this script with full paths."
 echo "DIRECTORY: $DIRECTORY"
+# WoR-Flasher v2 desktop launcher integration
+install_desktop_launcher() {
+  local applications_dir="$HOME/.local/share/applications"
+  local desktop_dir=''
+  local menu_launcher="$applications_dir/wor-flasher-v2.desktop"
+  local desktop_launcher=''
+
+  if command -v xdg-user-dir >/dev/null 2>&1;then
+    desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null)"
+  fi
+  [ -z "$desktop_dir" ] && desktop_dir="$HOME/Desktop"
+
+  mkdir -p "$applications_dir" "$desktop_dir" || {
+    echo "Warning: unable to create desktop launcher directories." 1>&2
+    return 0
+  }
+
+  printf '%s\n' \
+    '[Desktop Entry]' \
+    'Type=Application' \
+    'Version=1.0' \
+    'Name=WoR-Flasher v2' \
+    'Comment=Install Windows on Raspberry Pi' \
+    "Exec=\"$DIRECTORY/install-wor-gui.sh\"" \
+    "Path=$DIRECTORY" \
+    "Icon=$DIRECTORY/logo.png" \
+    'Terminal=false' \
+    'StartupNotify=true' \
+    'Categories=System;Utility;' \
+    > "$menu_launcher" || {
+      echo "Warning: unable to create $menu_launcher" 1>&2
+      return 0
+    }
+
+  chmod +x "$menu_launcher" "$DIRECTORY/install-wor-gui.sh" 2>/dev/null || true
+
+  desktop_launcher="$desktop_dir/WoR-Flasher-v2.desktop"
+  cp -f "$menu_launcher" "$desktop_launcher" 2>/dev/null || {
+    echo "Warning: unable to create $desktop_launcher" 1>&2
+    return 0
+  }
+  chmod +x "$desktop_launcher" 2>/dev/null || true
+
+  # Mark it trusted on desktops that support the GIO metadata attribute.
+  if command -v gio >/dev/null 2>&1;then
+    gio set "$desktop_launcher" metadata::trusted true 2>/dev/null || true
+  fi
+
+  # Refresh the applications menu when the utility is available.
+  if command -v update-desktop-database >/dev/null 2>&1;then
+    update-desktop-database "$applications_dir" >/dev/null 2>&1 || true
+  fi
+}
+
+install_desktop_launcher
 
 #Determine the directory to download windows component files to
 [ -z "$DL_DIR" ] && DL_DIR="$HOME/wor-flasher-files"
